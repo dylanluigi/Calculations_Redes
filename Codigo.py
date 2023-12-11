@@ -5,7 +5,7 @@ import numpy as np
 from scipy.optimize import linprog
 
 
-# Funciones originales proporcionadas por el usuario
+# Funciones
 
 def calcular_contenido_informacion(p_i, base=2):
     """
