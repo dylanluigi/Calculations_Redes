@@ -1,131 +1,193 @@
 import math
-import matplotlib.pyplot as plt
 import heapq
-from collections import defaultdict, Counter
+from collections import defaultdict
 import numpy as np
 from scipy.optimize import linprog
 
 
-# Original functions provided by the user
-def calculate_information_content(p_i, base=2):
+# Funciones originales proporcionadas por el usuario
+
+def calcular_contenido_informacion(p_i, base=2):
+    """
+    Calcula el contenido de información de una probabilidad p_i dada.
+
+    :param p_i: Probabilidad p_i entre 0 y 1.
+    :param base: Base del logaritmo para el cálculo.
+    :return: Contenido de información I_i.
+    """
     if not (0 < p_i <= 1):
-        raise ValueError("Probability p_i must be between 0 and 1")
+        raise ValueError("La probabilidad p_i debe estar entre 0 y 1")
     I_i = -math.log(p_i, base)
     return I_i
 
 
-def calculate_entropy(probabilities):
-    # Directly use the probabilities without converting to Decimal
-    entropy = sum(-p * math.log(p, 2) for p in probabilities.values() if p > 0)
-    return entropy
+def calcular_entropia(probabilidades):
+    """
+    Calcula la entropía de una fuente de información dada sus probabilidades.
+
+    :param probabilidades: Diccionario de probabilidades de símbolos.
+    :return: Valor de entropía.
+    """
+    entropia = sum(-p * math.log(p, 2) for p in probabilidades.values() if p > 0)
+    return entropia
 
 
-def build_huffman_tree(probabilities):
-    pq = [(prob, symbol) for symbol, prob in probabilities.items()]
+def construir_arbol_huffman(probabilidades):
+    """
+    Construye un árbol de codificación Huffman.
+
+    :param probabilidades: Diccionario de probabilidades de símbolos.
+    :return: Raíz del árbol de Huffman.
+    """
+    pq = [(prob, symbol) for symbol, prob in probabilidades.items()]
     heapq.heapify(pq)
     while len(pq) > 1:
         prob1, node1 = heapq.heappop(pq)
         prob2, node2 = heapq.heappop(pq)
-        merged_node = (prob1 + prob2, [node1, node2])
-        heapq.heappush(pq, merged_node)
+        nodo_fusionado = (prob1 + prob2, [node1, node2])
+        heapq.heappush(pq, nodo_fusionado)
     return pq[0][1]
 
 
-def calculate_huffman_codes(node, code="", mapping=None):
-    if mapping is None:
-        mapping = {}
-    if isinstance(node, str):
-        mapping[node] = code
+def calcular_codigos_huffman(nodo, codigo="", mapeo=None):
+    """
+    Calcula los códigos Huffman para los símbolos.
+
+    :param nodo: Nodo del árbol Huffman.
+    :param codigo: Código parcial actual.
+    :param mapeo: Diccionario para mapear símbolos a códigos.
+    :return: Diccionario de códigos Huffman.
+    """
+    if mapeo is None:
+        mapeo = {}
+    if isinstance(nodo, str):
+        mapeo[nodo] = codigo
     else:
-        calculate_huffman_codes(node[0], code + "0", mapping)
-        calculate_huffman_codes(node[1], code + "1", mapping)
-    return mapping
+        calcular_codigos_huffman(nodo[0], codigo + "0", mapeo)
+        calcular_codigos_huffman(nodo[1], codigo + "1", mapeo)
+    return mapeo
 
 
-def average_code_length(codes, probabilities):
-    # Use probabilities directly as floats
-    avg_length = sum(len(codes[symbol]) * prob for symbol, prob in probabilities.items())
-    return avg_length
+def longitud_promedio_codigos(codigos, probabilidades):
+    """
+    Calcula la longitud promedio de los códigos Huffman.
+
+    :param codigos: Diccionario de códigos Huffman.
+    :param probabilidades: Diccionario de probabilidades de símbolos.
+    :return: Longitud promedio de los códigos.
+    """
+    longitud_promedio = sum(len(codigos[simbolo]) * prob for simbolo, prob in probabilidades.items())
+    return longitud_promedio
 
 
-def simulate_transmission_error(message, error_rate):
-    corrupted_message = ''
-    for char in message:
-        binary_representation = format(ord(char), '08b')
-        corrupted_binary = ''.join(
-            '1' if bit == '0' else '0' if np.random.random() < error_rate else bit
-            for bit in binary_representation
+def simular_error_transmision(mensaje, tasa_error):
+    """
+    Simula errores de transmisión en un mensaje.
+
+    :param mensaje: Mensaje de entrada.
+    :param tasa_error: Tasa de error de transmisión.
+    :return: Mensaje con errores de transmisión.
+    """
+    mensaje_corrupto = ''
+    for caracter in mensaje:
+        representacion_binaria = format(ord(caracter), '08b')
+        binario_corrupto = ''.join(
+            '1' if bit == '0' else '0' if np.random.random() < tasa_error else bit
+            for bit in representacion_binaria
         )
-        corrupted_char = chr(int(corrupted_binary, 2))
-        corrupted_message += corrupted_char
-    return corrupted_message
+        caracter_corrupto = chr(int(binario_corrupto, 2))
+        mensaje_corrupto += caracter_corrupto
+    return mensaje_corrupto
 
 
-# New function for channel simulation with errors
-def simulate_channel_with_errors(probabilities, error_rate):
-    p_y_given_x = {x: {y: 0 for y in probabilities} for x in probabilities}
-    for x in probabilities:
-        for y in probabilities:
+# Nueva función para simular el canal con errores
+
+def simular_canal_con_errores(probabilidades, tasa_error):
+    """
+    Simula el comportamiento de un canal con errores.
+
+    :param probabilidades: Diccionario de probabilidades de símbolos.
+    :param tasa_error: Tasa de error de transmisión.
+    :return: Probabilidades condicionales p(y|x).
+    """
+    p_y_dado_x = {x: {y: 0 for y in probabilidades} for x in probabilidades}
+    for x in probabilidades:
+        for y in probabilidades:
             if x == y:
-                p_y_given_x[x][y] = 1 - error_rate
+                p_y_dado_x[x][y] = 1 - tasa_error
             else:
-                p_y_given_x[x][y] = error_rate / (len(probabilities) - 1)
-    return p_y_given_x
+                p_y_dado_x[x][y] = tasa_error / (len(probabilidades) - 1)
+    return p_y_dado_x
 
 
-# Integration of mutual information and conditional entropy calculation
-def calculate_mutual_information(p_x, p_y_given_x):
+# Integración de la información mutua y cálculo de la entropía condicional
+
+def calcular_informacion_mutua(p_x, p_y_dado_x):
+    """
+    Calcula la información mutua entre X e Y.
+
+    :param p_x: Probabilidades marginales p(x).
+    :param p_y_dado_x: Probabilidades condicionales p(y|x).
+    :return: Información mutua I(X; Y).
+    """
     p_y = defaultdict(float)
     for x in p_x:
-        for y in p_y_given_x[x]:
-            p_y[y] += p_x[x] * p_y_given_x[x][y]
+        for y in p_y_dado_x[x]:
+            p_y[y] += p_x[x] * p_y_dado_x[x][y]
     I_XY = 0
     for x in p_x:
-        for y in p_y_given_x[x]:
-            if p_y_given_x[x][y] > 0 and p_y[y] > 0:
-                I_XY += p_x[x] * p_y_given_x[x][y] * math.log(p_y_given_x[x][y] / p_y[y], 2)
+        for y in p_y_dado_x[x]:
+            if p_y_dado_x[x][y] > 0 and p_y[y] > 0:
+                I_XY += p_x[x] * p_y_dado_x[x][y] * math.log(p_y_dado_x[x][y] / p_y[y], 2)
     return I_XY
 
 
-def calculate_conditional_entropy(p_x, p_y_given_x):
-    H_Y_given_X = 0
+def calcular_entropia_condicional(p_x, p_y_dado_x):
+    """
+    Calcula la entropía condicional H(Y|X).
+
+    :param p_x: Probabilidades marginales p(x).
+    :param p_y_dado_x: Probabilidades condicionales p(y|x).
+    :return: Entropía condicional H(Y|X).
+    """
+    H_Y_dado_X = 0
     for x in p_x:
-        for y in p_y_given_x[x]:
-            if p_y_given_x[x][y] > 0:
-                H_Y_given_X += p_x[x] * p_y_given_x[x][y] * math.log(p_y_given_x[x][y], 2)
-    return -H_Y_given_X
+        for y in p_y_dado_x[x]:
+            if p_y_dado_x[x][y] > 0:
+                H_Y_dado_X += p_x[x] * p_y_dado_x[x][y] * math.log(p_y_dado_x[x][y], 2)
+    return -H_Y_dado_X
 
 
-def channel_capacity(p_y_given_x):
-    # Objective function coefficients for minimization
-    c = [-1 for _ in p_y_given_x]
+# Cálculo de la capacidad del canal
 
-    # Equality constraint: sum of probabilities must equal 1
-    A_eq = [[1] * len(p_y_given_x)]
+def capacidad_canal(p_y_dado_x):
+    """
+    Calcula la capacidad del canal.
+
+    :param p_y_dado_x: Probabilidades condicionales p(y|x).
+    :return: Capacidad del canal en bits por símbolo.
+    """
+    c = [-1 for _ in p_y_dado_x]
+    A_eq = [[1] * len(p_y_dado_x)]
     b_eq = [1]
+    A_ub = [[-1 if j == i else 0 for j in range(len(p_y_dado_x))] for i in range(len(p_y_dado_x))]
+    b_ub = [0 for _ in p_y_dado_x]
+    bounds = [(0, 1) for _ in p_y_dado_x]
 
-    # Inequality constraints: probabilities must be non-negative
-    A_ub = [[-1 if j == i else 0 for j in range(len(p_y_given_x))] for i in range(len(p_y_given_x))]
-    b_ub = [0 for _ in p_y_given_x]
+    resultado = linprog(c, A_eq=A_eq, b_eq=b_eq, A_ub=A_ub, b_ub=b_ub, bounds=bounds, method='highs')
 
-    # Bounds for probabilities (0 <= p_x <= 1)
-    bounds = [(0, 1) for _ in p_y_given_x]
-
-    # Solve the linear programming problem
-    result = linprog(c, A_eq=A_eq, b_eq=b_eq, A_ub=A_ub, b_ub=b_ub, bounds=bounds, method='highs')
-
-    if result.success:
-        optimized_p_x = result.x
-        channel_capacity_value = -result.fun  # Negate to get the actual value
-        print(f"Optimized p(x): {optimized_p_x}")
-        print(f"Channel Capacity: {channel_capacity_value:.10f} bits per symbol")
-        return channel_capacity_value
+    if resultado.success:
+        p_x_optimizado = resultado.x
+        capacidad_canal_valor = -resultado.fun
+        print(f"P(x) optimizado: {p_x_optimizado}")
+        print(f"Capacidad del canal: {capacidad_canal_valor:.10f} bits por símbolo")
+        return capacidad_canal_valor
     else:
-        raise ValueError("Optimization failed. The error message: {}".format(result.message))
+        raise ValueError("La optimización falló. Mensaje de error: {}".format(resultado.message))
 
 
 def main():
-    probabilities = {
+    probabilidades = {
         "a": 11.7868890,
         "b": 1.5914440,
         "c": 4.0138747,
@@ -154,62 +216,61 @@ def main():
         "z": 0.3603828
     }
 
-    # Normalize probabilities to sum to 1
-    total_probability = sum(probabilities.values())
-    normalized_probabilities = {k: v / total_probability for k, v in probabilities.items()}
+    # Normalizar probabilidades para que sumen 1
+    total_probabilidad = sum(probabilidades.values())
+    probabilidades_normalizadas = {k: v / total_probabilidad for k, v in probabilidades.items()}
 
-    # Calculate information content for each letter
-    information_content = {letter: calculate_information_content(prob) for letter, prob in
-                           normalized_probabilities.items()}
+    # Calcular el contenido de información para cada letra
+    contenido_informacion = {letra: calcular_contenido_informacion(prob) for letra, prob in
+                             probabilidades_normalizadas.items()}
 
-    # Calculate entropy of the source
-    entropy_of_source = calculate_entropy(normalized_probabilities)
+    # Calcular la entropía de la fuente
+    entropia_fuente = calcular_entropia(probabilidades_normalizadas)
 
-    # Build Huffman coding tree
-    huffman_tree = build_huffman_tree(normalized_probabilities)
+    # Construir el árbol de codificación Huffman
+    arbol_huffman = construir_arbol_huffman(probabilidades_normalizadas)
 
-    # Calculate Huffman codes
-    huffman_codes = calculate_huffman_codes(huffman_tree)
+    # Calcular los códigos Huffman
+    codigos_huffman = calcular_codigos_huffman(arbol_huffman)
 
-    # Print information content for each letter
-    for letter, info_content in information_content.items():
-        print(f"Letter '{letter}' has an information content of: {info_content:.2f} bits")
+    # Imprimir el contenido de información para cada letra
+    for letra, info_contenido in contenido_informacion.items():
+        print(f"Letra '{letra}' tiene un contenido de información de: {info_contenido:.2f} bits")
 
-    # Print the entropy of the source
-    print(f"\nEntropy of the source: {entropy_of_source:.2f} bits")
+    # Imprimir la entropía de la fuente
+    print(f"\nEntropía de la fuente: {entropia_fuente:.2f} bits")
 
-    # Print Huffman codes
-    print("\nHuffman Codes:")
-    for symbol, code in huffman_codes.items():
-        print(f"Symbol '{symbol}': {code}")
+    # Imprimir los códigos Huffman
+    print("\nCódigos Huffman:")
+    for simbolo, codigo in codigos_huffman.items():
+        print(f"Símbolo '{simbolo}': {codigo}")
 
-    # Calculate the average code length
-    avg_code_length = average_code_length(huffman_codes, normalized_probabilities)
-    print(f"Average code length: {avg_code_length:.2f} bits")
+    # Calcular la longitud promedio de los códigos
+    longitud_promedio_codigos_huffman = longitud_promedio_codigos(codigos_huffman, probabilidades_normalizadas)
+    print(f"Longitud promedio de los códigos: {longitud_promedio_codigos_huffman:.2f} bits")
 
-    # Since Huffman codes are CUD by design
-    print("Huffman codes are uniquely decodable (CUD) by design.")
+    # Dado que los códigos Huffman son CUD por diseño
+    print("Los códigos Huffman son unívocamente decodificables (CUD) por diseño.")
 
-    # Calculate epsilon (ε) as the difference between the average code length and the entropy
-    epsilon = avg_code_length - entropy_of_source
+    # Calcular epsilon (ε) como la diferencia entre la longitud promedio de los códigos y la entropía
+    epsilon = longitud_promedio_codigos_huffman - entropia_fuente
     print(f"Epsilon (ε): {epsilon:.2f} bits")
 
-    # Bit Error Rate for Ethernet Cat-8
+    # Tasa de error de bits para Ethernet Cat-8
     ber_cat8 = 1E-10
 
-    # Simulate the channel behavior
-    p_y_given_x = simulate_channel_with_errors(normalized_probabilities, ber_cat8)
+    # Simular el comportamiento del canal
+    p_y_dado_x = simular_canal_con_errores(probabilidades_normalizadas, ber_cat8)
 
-    # Calculate and print mutual information and conditional entropy
-    mutual_info = calculate_mutual_information(normalized_probabilities, p_y_given_x)
-    conditional_entropy = calculate_conditional_entropy(normalized_probabilities, p_y_given_x)
-    print(f"Mutual Information I(X; Y): {mutual_info:.10f} bits")
-    print(f"Conditional Entropy H(Y|X): {conditional_entropy:.10f} bits")
+    # Calcular e imprimir la información mutua y la entropía condicional
+    informacion_mutua = calcular_informacion_mutua(probabilidades_normalizadas, p_y_dado_x)
+    entropia_condicional = calcular_entropia_condicional(probabilidades_normalizadas, p_y_dado_x)
+    print(f"Información Mutua I(X; Y): {informacion_mutua:.10f} bits")
+    print(f"Entropía Condicional H(Y|X): {entropia_condicional:.10f} bits")
 
-    Cs = channel_capacity(p_y_given_x)
-
-    # Print the calculated channel capacity
-    print(f"Channel Capacity Cs: {Cs:.10f} bits per symbol")
+    # Calcular e imprimir la capacidad del canal calculada
+    capacidad = capacidad_canal(p_y_dado_x)
+    print(f"Capacidad del Canal: {capacidad:.10f} bits por símbolo")
 
 
 if __name__ == "__main__":
