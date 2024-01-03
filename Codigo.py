@@ -80,28 +80,6 @@ def longitud_promedio_codigos(codigos, probabilidades):
     return longitud_promedio
 
 
-def simular_error_transmision(mensaje, tasa_error):
-    """
-    Simula errores de transmisión en un mensaje.
-
-    :param mensaje: Mensaje de entrada.
-    :param tasa_error: Tasa de error de transmisión.
-    :return: Mensaje con errores de transmisión.
-    """
-    mensaje_corrupto = ''
-    for caracter in mensaje:
-        representacion_binaria = format(ord(caracter), '08b')
-        binario_corrupto = ''.join(
-            '1' if bit == '0' else '0' if np.random.random() < tasa_error else bit
-            for bit in representacion_binaria
-        )
-        caracter_corrupto = chr(int(binario_corrupto, 2))
-        mensaje_corrupto += caracter_corrupto
-    return mensaje_corrupto
-
-
-# Nueva función para simular el canal con errores
-
 def simular_canal_con_errores(probabilidades, tasa_error):
     """
     Simula el comportamiento de un canal con errores.
@@ -119,8 +97,6 @@ def simular_canal_con_errores(probabilidades, tasa_error):
                 p_y_dado_x[x][y] = tasa_error / (len(probabilidades) - 1)
     return p_y_dado_x
 
-
-# Integración de la información mutua y cálculo de la entropía condicional
 
 def calcular_informacion_mutua(p_x, p_y_dado_x):
     """
@@ -179,11 +155,93 @@ def capacidad_canal(p_y_dado_x):
     if resultado.success:
         p_x_optimizado = resultado.x
         capacidad_canal_valor = -resultado.fun
-        print(f"P(x) optimizado: {p_x_optimizado}")
+        print("P(x) optimizado:")
+        for prob in p_x_optimizado:
+            print(f"{prob:.10f}")  # Display each probability with 10 decimal places
         print(f"Capacidad del canal: {capacidad_canal_valor:.10f} bits por símbolo")
         return capacidad_canal_valor
     else:
         raise ValueError("La optimización falló. Mensaje de error: {}".format(resultado.message))
+
+
+def calcular_tasa_datos_nyquist(banda, niveles):
+    """
+    Calcula la tasa máxima de datos según el criterio de Nyquist.
+
+    :param banda: Ancho de banda del canal (en Hz).
+    :param niveles: Número de niveles de señal discretos.
+    :return: Tasa máxima de datos (en bits por segundo).
+    """
+    return 2 * banda
+
+
+def calcular_capacidad_shannon(banda, snr):
+    """
+    Calcula la capacidad máxima del canal según la fórmula de Shannon.
+
+    :param banda: Ancho de banda del canal (en Hz).
+    :param snr: Relación señal-ruido (SNR).
+    :return: Capacidad del canal (en bits por segundo).
+    """
+    return banda * math.log2(1 + snr)
+
+
+def Q_function(x):
+    """
+    Approximate the Q-function, which is often used in BER calculations.
+
+    :param x: Input to the Q-function.
+    :return: Approximated Q-function result.
+    """
+    return 0.5 - 0.5 * math.erf(x / (2 ** 0.5))
+
+
+def calculate_received_signal_power(transmitted_power_dbm, attenuation_db, distance_km):
+    """
+    Calculate the received signal power.
+
+    :param transmitted_power_dbm: Transmitted power in dBm.
+    :param attenuation_db: Attenuation coefficient in dB/km.
+    :param distance_km: Distance in kilometers.
+    :return: Received power in dBm.
+    """
+    # Calculate total attenuation
+    total_attenuation_db = attenuation_db * distance_km
+
+    # Calculate received power
+    received_power_dbm = transmitted_power_dbm - total_attenuation_db
+
+    return received_power_dbm
+
+
+def calculate_noise_power(thermal_noise_dbm, noise_figure_db):
+    noise_power_dbm = thermal_noise_dbm + noise_figure_db
+    return noise_power_dbm
+
+
+def calculate_snr(received_power_dbm, noise_power_dbm):
+    snr_db = received_power_dbm - noise_power_dbm
+    return snr_db
+
+
+def calculate_spectral_efficiency(data_rate_bps, bandwidth_hz):
+    return data_rate_bps / bandwidth_hz
+
+
+def calculate_ber(snr_linear, modulation_type):
+    if modulation_type == 'PSK':
+        return Q_function(np.sqrt(2 * snr_linear))
+    else:
+        # Placeholder for other modulation types
+        return None
+
+
+def verify_shannons_formula(capacity_bps, bandwidth_hz, snr_linear):
+    return capacity_bps < bandwidth_hz * math.log2(1 + snr_linear)
+
+
+def determine_channel_bandwidth(symbol_rate_bps, rolloff_factor):
+    return symbol_rate_bps * (1 + rolloff_factor)
 
 
 def main():
@@ -216,60 +274,71 @@ def main():
         "z": 0.3603828
     }
 
-    # Normalizar probabilidades para que sumen 1
     total_probabilidad = sum(probabilidades.values())
     probabilidades_normalizadas = {k: v / total_probabilidad for k, v in probabilidades.items()}
 
-    # Calcular el contenido de información para cada letra
+    # Huffman coding calculations
     contenido_informacion = {letra: calcular_contenido_informacion(prob) for letra, prob in
                              probabilidades_normalizadas.items()}
-
-    # Calcular la entropía de la fuente
     entropia_fuente = calcular_entropia(probabilidades_normalizadas)
-
-    # Construir el árbol de codificación Huffman
     arbol_huffman = construir_arbol_huffman(probabilidades_normalizadas)
-
-    # Calcular los códigos Huffman
     codigos_huffman = calcular_codigos_huffman(arbol_huffman)
+    longitud_promedio_codigos_huffman = longitud_promedio_codigos(codigos_huffman, probabilidades_normalizadas)
+    epsilon = longitud_promedio_codigos_huffman - entropia_fuente
 
-    # Imprimir el contenido de información para cada letra
-    for letra, info_contenido in contenido_informacion.items():
-        print(f"Letra '{letra}' tiene un contenido de información de: {info_contenido:.2f} bits")
+    # Channel parameters and calculations
+    transmitted_power_dbm = 3
+    attenuation_db = 0.35
+    thermal_noise_dbm = -174
+    noise_figure_db = 4
+    data_rate_bps = 1e9
+    bandwidth_hz = 5e8
+    rolloff_factor = 0.25
 
-    # Imprimir la entropía de la fuente
+    received_power_dbm = calculate_received_signal_power(transmitted_power_dbm, attenuation_db, 1)
+    noise_power_dbm = calculate_noise_power(thermal_noise_dbm, noise_figure_db)
+    snr_db = calculate_snr(received_power_dbm, noise_power_dbm)
+    snr_linear = 10 ** (snr_db / 10)
+    spectral_efficiency = calculate_spectral_efficiency(data_rate_bps, bandwidth_hz)
+    ber = calculate_ber(snr_linear, 'PSK')
+    channel_bandwidth = determine_channel_bandwidth(data_rate_bps, rolloff_factor)
+    shannons_compliance = verify_shannons_formula(data_rate_bps, bandwidth_hz, snr_linear)
+
+    p_y_dado_x = simular_canal_con_errores(probabilidades_normalizadas, ber)
+    informacion_mutua = calcular_informacion_mutua(probabilidades_normalizadas, p_y_dado_x)
+    entropia_condicional = calcular_entropia_condicional(probabilidades_normalizadas, p_y_dado_x)
+    capacidad = capacidad_canal(p_y_dado_x)
+
+    # Print results
+    print_results(contenido_informacion, entropia_fuente, codigos_huffman, longitud_promedio_codigos_huffman, epsilon,
+                  received_power_dbm, noise_power_dbm, snr_db, spectral_efficiency, ber, channel_bandwidth,
+                  shannons_compliance, informacion_mutua, entropia_condicional, capacidad)
+
+
+def print_results(contenido_informacion, entropia_fuente, codigos_huffman, longitud_promedio_codigos_huffman, epsilon,
+                  received_power_dbm, noise_power_dbm, snr_db, spectral_efficiency, ber, channel_bandwidth,
+                  shannons_compliance, informacion_mutua, entropia_condicional, capacidad):
+    # Print Huffman coding results
+    print("Contenido de información:")
+    for letra, info in contenido_informacion.items():
+        print(f"Letra '{letra}': {info:.2f} bits")
     print(f"\nEntropía de la fuente: {entropia_fuente:.2f} bits")
-
-    # Imprimir los códigos Huffman
     print("\nCódigos Huffman:")
     for simbolo, codigo in codigos_huffman.items():
         print(f"Símbolo '{simbolo}': {codigo}")
-
-    # Calcular la longitud promedio de los códigos
-    longitud_promedio_codigos_huffman = longitud_promedio_codigos(codigos_huffman, probabilidades_normalizadas)
-    print(f"Longitud promedio de los códigos: {longitud_promedio_codigos_huffman:.2f} bits")
-
-    # Dado que los códigos Huffman son CUD por diseño
-    print("Los códigos Huffman son unívocamente decodificables (CUD) por diseño.")
-
-    # Calcular epsilon (ε) como la diferencia entre la longitud promedio de los códigos y la entropía
-    epsilon = longitud_promedio_codigos_huffman - entropia_fuente
+    print(f"Longitud promedio de los códigos Huffman: {longitud_promedio_codigos_huffman:.2f} bits")
     print(f"Epsilon (ε): {epsilon:.2f} bits")
 
-    # Tasa de error de bits para Ethernet Cat-8
-    ber_cat8 = 1E-10
-
-    # Simular el comportamiento del canal
-    p_y_dado_x = simular_canal_con_errores(probabilidades_normalizadas, ber_cat8)
-
-    # Calcular e imprimir la información mutua y la entropía condicional
-    informacion_mutua = calcular_informacion_mutua(probabilidades_normalizadas, p_y_dado_x)
-    entropia_condicional = calcular_entropia_condicional(probabilidades_normalizadas, p_y_dado_x)
+    # Print channel analysis results
+    print(f"\nReceived Power (dBm): {received_power_dbm}")
+    print(f"Noise Power (dBm): {noise_power_dbm}")
+    print(f"SNR (dB): {snr_db}")
+    print(f"Spectral Efficiency (bps/Hz): {spectral_efficiency}")
+    print(f"BER: {ber:.15f}")
+    print(f"Channel Bandwidth (Hz): {channel_bandwidth}")
+    print(f"Shannon's Compliance: {'Yes' if shannons_compliance else 'No'}")
     print(f"Información Mutua I(X; Y): {informacion_mutua:.10f} bits")
     print(f"Entropía Condicional H(Y|X): {entropia_condicional:.10f} bits")
-
-    # Calcular e imprimir la capacidad del canal calculada
-    capacidad = capacidad_canal(p_y_dado_x)
     print(f"Capacidad del Canal: {capacidad:.10f} bits por símbolo")
 
 
